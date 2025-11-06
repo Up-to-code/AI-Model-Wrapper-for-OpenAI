@@ -2,40 +2,40 @@
 import OpenAI from 'openai';
 
 // ============================================
-// CONFIGURATION TYPES
+// CORE TYPES AND INTERFACES
 // ============================================
 
 /**
- * Configuration for an AI provider
+ * Configuration for AI providers like OpenAI, Anthropic, OpenRouter, etc.
  * @interface AIProviderConfig
  */
 export interface AIProviderConfig {
-  /** Human-readable name of the provider */
+  /** Human-readable provider name */
   name: string;
-  /** Base URL for the provider's API */
+  /** API base URL */
   baseURL: string;
-  /** Default model to use for this provider */
+  /** Default model to use */
   defaultModel: string;
-  /** Optional default headers to include in requests */
+  /** Optional default headers */
   headers?: Record<string, string>;
 }
 
 /**
- * Configuration options for AI model initialization
+ * Main configuration for AI model instances
  * @interface AIModelConfig
  */
 export interface AIModelConfig {
-  /** API key for authentication */
+  /** API key for authentication (required) */
   apiKey: string;
-  /** Provider identifier (e.g., 'openrouter', 'openai', 'anthropic') */
+  /** Provider ID - 'openai', 'anthropic', 'openrouter', or custom */
   provider?: string;
-  /** Model name to use (overrides provider default) */
+  /** Specific model name override */
   model?: string;
-  /** Temperature for response generation (0.0 to 1.0) */
+  /** Creativity level: 0.0 (deterministic) to 1.0 (creative) */
   temperature?: number;
   /** Maximum tokens in response */
   maxTokens?: number;
-  /** System prompt to set context */
+  /** System context/personality prompt */
   systemPrompt?: string;
   /** Enable debug logging */
   debug?: boolean;
@@ -46,104 +46,102 @@ export interface AIModelConfig {
 }
 
 /**
- * Options for individual requests
+ * Per-request options that override model defaults
  * @interface RequestOptions
  */
 export interface RequestOptions {
-  /** Model name for this request */
+  /** Model override for this request */
   model?: string;
-  /** Temperature for this request */
+  /** Temperature override */
   temperature?: number;
-  /** Maximum tokens for this request */
+  /** Max tokens override */
   maxTokens?: number;
-  /** Enable streaming response */
+  /** Enable streaming mode */
   stream?: boolean;
 }
 
 /**
- * Content structure for messages with multiple parts
+ * Represents content in a message - can be text or image
  * @interface MessageContent
  */
 export interface MessageContent {
-  /** Type of content: text or image */
+  /** Content type */
   type: 'text' | 'image_url';
-  /** Text content (when type is 'text') */
+  /** Text content (for text type) */
   text?: string;
-  /** Image URL (when type is 'image_url') */
+  /** Image data (for image type) */
   image_url?: {
-    /** URL of the image */
+    /** Image URL */
     url: string;
   };
 }
 
 /**
- * Message structure for chat conversations
+ * A message in the conversation history
  * @interface Message
  */
 export interface Message {
-  /** Role of the message sender */
+  /** Who sent the message */
   role: 'system' | 'user' | 'assistant';
-  /** Content of the message (string or array of content parts) */
+  /** The message content */
   content: string | MessageContent[];
 }
 
 /**
- * Response structure from AI model
+ * Complete response from AI model
  * @interface AIResponse
  */
 export interface AIResponse {
-  /** Generated response content */
+  /** The generated text response */
   content: string;
-  /** Token usage information */
+  /** Token usage statistics */
   usage: {
-    /** Tokens used in the prompt */
+    /** Input tokens used */
     promptTokens: number;
-    /** Tokens used in the completion */
+    /** Output tokens used */
     completionTokens: number;
     /** Total tokens used */
     totalTokens: number;
   };
   /** Model that generated the response */
   model: string;
-  /** Reason the response finished */
+  /** Why the generation stopped */
   finishReason?: string;
 }
 
 // ============================================
-// LOGGER INTERFACE
+// LOGGING SYSTEM
 // ============================================
 
 /**
- * Interface for logging implementations
+ * Logger interface for flexible logging implementations
  * @interface Logger
  */
 export interface Logger {
   /**
-   * Log a message with optional data
-   * @param {string} type - Type of log entry (e.g., 'REQUEST', 'RESPONSE')
-   * @param {string} message - Log message
-   * @param {any} [data] - Optional data to include in log
+   * Log a message with data
+   * @param type - Log category
+   * @param message - Log message
+   * @param data - Optional additional data
    */
-  log(type: string, message: string, data?: any): void;
+  log(type: string, message: string, data?: unknown): void;
   
   /**
-   * Enable or disable logging
-   * @param {boolean} enabled - Whether to enable logging
+   * Enable/disable logging
+   * @param enabled - Logging state
    */
   enable(enabled: boolean): void;
 }
 
 /**
- * Default console-based logger implementation
+ * Default console logger with colored output
  * @class DefaultLogger
  * @implements {Logger}
  */
 export class DefaultLogger implements Logger {
-  /** Whether logging is enabled */
-  private enabled: boolean = false;
+  private enabled = false;
   
-  /** Color codes for different log types */
-  private colors = {
+  private readonly colors = {
     REQUEST: '\x1b[36m',    // Cyan
     RESPONSE: '\x1b[32m',   // Green
     STREAM: '\x1b[33m',     // Yellow
@@ -154,12 +152,12 @@ export class DefaultLogger implements Logger {
   };
 
   /**
-   * Log a message with colored formatting
-   * @param {string} type - Type of log entry
-   * @param {string} message - Log message
-   * @param {any} [data] - Optional data to log
+   * Log with colored formatting and structured data
+   * @param type - Log type for color coding
+   * @param message - Main log message
+   * @param data - Optional structured data
    */
-  log(type: string, message: string, data?: any): void {
+  log(type: string, message: string, data?: unknown): void {
     if (!this.enabled) return;
 
     const timestamp = new Date().toISOString();
@@ -177,8 +175,8 @@ export class DefaultLogger implements Logger {
   }
 
   /**
-   * Enable or disable logging
-   * @param {boolean} enabled - Whether to enable logging
+   * Enable or disable logging output
+   * @param enabled - Whether logging should be active
    */
   enable(enabled: boolean): void {
     this.enabled = enabled;
@@ -186,15 +184,23 @@ export class DefaultLogger implements Logger {
 }
 
 // ============================================
-// PROVIDER REGISTRY
+// PROVIDER MANAGEMENT
 // ============================================
 
 /**
- * Registry for managing AI provider configurations
+ * Global registry for AI provider configurations
+ * Manages built-in providers and allows custom provider registration
  * @class ProviderRegistry
+ * @example
+ * // Register custom provider
+ * ProviderRegistry.registerProvider('my-ai', {
+ *   name: 'My AI Service',
+ *   baseURL: 'https://api.my-ai.com/v1',
+ *   defaultModel: 'my-model-v1'
+ * });
  */
 export class ProviderRegistry {
-  /** Map of registered providers */
+  /** Internal storage of provider configurations */
   private static providers: Map<string, AIProviderConfig> = new Map([
     ['openrouter', {
       name: 'OpenRouter',
@@ -218,24 +224,22 @@ export class ProviderRegistry {
   ]);
 
   /**
-   * Register a new AI provider
-   * @param {string} id - Unique identifier for the provider
-   * @param {AIProviderConfig} config - Provider configuration
-   * @example
-   * ProviderRegistry.registerProvider('custom', {
-   *   name: 'Custom AI',
-   *   baseURL: 'https://api.custom.ai/v1',
-   *   defaultModel: 'custom-model-v1'
-   * });
+   * Register a new AI provider or update existing one
+   * @param id - Unique provider identifier
+   * @param config - Provider configuration
+   * @throws {Error} If configuration is invalid
    */
   static registerProvider(id: string, config: AIProviderConfig): void {
+    if (!id || !config.name || !config.baseURL || !config.defaultModel) {
+      throw new Error('Provider configuration requires id, name, baseURL, and defaultModel');
+    }
     this.providers.set(id, config);
   }
 
   /**
-   * Get a registered provider configuration
-   * @param {string} id - Provider identifier
-   * @returns {AIProviderConfig | undefined} Provider configuration or undefined if not found
+   * Retrieve provider configuration by ID
+   * @param id - Provider identifier
+   * @returns Provider config or undefined if not found
    */
   static getProvider(id: string): AIProviderConfig | undefined {
     return this.providers.get(id);
@@ -243,17 +247,17 @@ export class ProviderRegistry {
 
   /**
    * Get all registered providers
-   * @returns {Map<string, AIProviderConfig>} Map of all providers
+   * @returns Read-only map of all providers
    */
   static getAllProviders(): Map<string, AIProviderConfig> {
     return new Map(this.providers);
   }
 
   /**
-   * Update an existing provider configuration
-   * @param {string} id - Provider identifier
-   * @param {Partial<AIProviderConfig>} config - Partial configuration to merge
-   * @returns {boolean} True if provider was updated, false if not found
+   * Update existing provider configuration
+   * @param id - Provider identifier
+   * @param config - Partial configuration to merge
+   * @returns True if provider was updated, false if not found
    */
   static updateProvider(id: string, config: Partial<AIProviderConfig>): boolean {
     const existing = this.providers.get(id);
@@ -262,6 +266,24 @@ export class ProviderRegistry {
     this.providers.set(id, { ...existing, ...config });
     return true;
   }
+
+  /**
+   * Check if provider exists
+   * @param id - Provider identifier
+   * @returns True if provider is registered
+   */
+  static hasProvider(id: string): boolean {
+    return this.providers.has(id);
+  }
+
+  /**
+   * Remove a provider from registry
+   * @param id - Provider identifier
+   * @returns True if provider was removed
+   */
+  static removeProvider(id: string): boolean {
+    return this.providers.delete(id);
+  }
 }
 
 // ============================================
@@ -269,64 +291,64 @@ export class ProviderRegistry {
 // ============================================
 
 /**
- * Main AI Model class for interacting with various AI providers
+ * Primary class for interacting with AI models across multiple providers
+ * Supports chat completion, streaming, image analysis, and conversation management
  * @class AIModel
  * @example
+ * // Basic usage
  * const ai = new AIModel({
- *   apiKey: 'your-api-key',
+ *   apiKey: 'your-key',
  *   provider: 'openrouter',
- *   model: 'gpt-3.5-turbo',
  *   debug: true
  * });
  * 
+ * // Chain messages and send
  * const response = await ai
- *   .addUserMessage('Hello, how are you?')
+ *   .addUserMessage('Hello!')
+ *   .addUserMessage('How are you?')
  *   .send();
- * console.log(response.content);
+ * 
+ * // Quick single message
+ * const quickResponse = await ai.sendTextMessage('Tell me a joke');
  */
 export class AIModel {
-  /** OpenAI client instance */
   private client: OpenAI;
-  
-  /** Array of messages in the conversation */
   private messages: Message[] = [];
-  
-  /** Model configuration */
   private config: Required<Omit<AIModelConfig, 'apiKey' | 'provider'>>;
-  
-  /** Provider configuration */
   private provider: AIProviderConfig;
-  
-  /** Logger instance */
   private logger: Logger;
 
   /**
-   * Create an AI Model instance
-   * @param {AIModelConfig} config - Model configuration
-   * @param {Logger} [logger] - Optional custom logger
-   * @throws {Error} If API key is missing or provider is not found
+   * Create new AI model instance
+   * @param config - Model configuration
+   * @param logger - Optional custom logger
+   * @throws {Error} If API key missing or provider not found
    */
   constructor(config: AIModelConfig, logger?: Logger) {
-    // Validate API key
-    if (!config.apiKey) {
-      throw new Error('API key is required');
+    // Validate required configuration
+    if (!config.apiKey?.trim()) {
+      throw new Error('API key is required and cannot be empty');
     }
 
-    // Set logger
+    // Initialize logging
     this.logger = logger || new DefaultLogger();
     this.logger.enable(!!config.debug);
 
-    // Get provider configuration
+    // Resolve provider configuration
     const providerId = config.provider || 'openrouter';
     const provider = ProviderRegistry.getProvider(providerId);
     
     if (!provider) {
-      throw new Error(`Provider '${providerId}' not found. Register it first or use a known provider.`);
+      const available = Array.from(ProviderRegistry.getAllProviders().keys()).join(', ');
+      throw new Error(
+        `Provider '${providerId}' not found. Available providers: ${available}. ` +
+        'Use ProviderRegistry.registerProvider() to add custom providers.'
+      );
     }
     
     this.provider = provider;
 
-    // Initialize OpenAI client
+    // Initialize OpenAI client (works with any OpenAI-compatible API)
     this.client = new OpenAI({ 
       apiKey: config.apiKey,
       baseURL: provider.baseURL,
@@ -342,6 +364,7 @@ export class AIModel {
       systemPrompt: config.systemPrompt || '',
       debug: config.debug ?? false,
       retryAttempts: config.retryAttempts || 3,
+      timeout: config.timeout || 30000,
     };
 
     this.logger.log('CONFIG', '🚀 AIModel initialized', {
@@ -354,17 +377,15 @@ export class AIModel {
   }
 
   // ============================================
-  // CONFIGURATION METHODS
+  // CONFIGURATION MANAGEMENT
   // ============================================
 
   /**
-   * Set the system prompt for the conversation
-   * @param {string} prompt - System prompt text
-   * @returns {this} Chainable instance
+   * Set or update the system prompt (context/role for AI)
+   * @param prompt - System prompt text
+   * @returns This instance for chaining
    * @example
-   * ai.setSystemPrompt('You are a helpful assistant.')
-   *    .addUserMessage('Hello')
-   *    .send();
+   * ai.setSystemPrompt('You are a helpful assistant that speaks like a pirate.');
    */
   setSystemPrompt(prompt: string): this {
     this.config.systemPrompt = prompt;
@@ -376,8 +397,8 @@ export class AIModel {
   }
 
   /**
-   * Get the current system prompt
-   * @returns {string} Current system prompt
+   * Get current system prompt
+   * @returns Current system prompt
    */
   getSystemPrompt(): string {
     return this.config.systemPrompt;
@@ -385,12 +406,12 @@ export class AIModel {
 
   /**
    * Update model configuration
-   * @param {Partial<Omit<AIModelConfig, 'apiKey' | 'provider'>>} config - Configuration updates
-   * @returns {this} Chainable instance
+   * @param config - Configuration changes
+   * @returns This instance for chaining
    * @example
    * ai.updateConfig({
-   *   temperature: 0.9,
-   *   maxTokens: 2000
+   *   temperature: 0.9, // More creative
+   *   maxTokens: 2000   // Longer responses
    * });
    */
   updateConfig(config: Partial<Omit<AIModelConfig, 'apiKey' | 'provider'>>): this {
@@ -407,22 +428,22 @@ export class AIModel {
   }
 
   /**
-   * Get current model configuration
-   * @returns {Required<Omit<AIModelConfig, 'apiKey' | 'provider'>>} Current configuration
+   * Get current configuration
+   * @returns Read-only copy of current configuration
    */
   getConfig(): Required<Omit<AIModelConfig, 'apiKey' | 'provider'>> {
     return { ...this.config };
   }
 
   /**
-   * Enable or disable debug mode
-   * @param {boolean} [enable=true] - Whether to enable debug
-   * @returns {this} Chainable instance
+   * Enable or disable debug logging
+   * @param enable - Debug state (default: true)
+   * @returns This instance for chaining
    */
-  enableDebug(enable: boolean = true): this {
+  enableDebug(enable = true): this {
     this.config.debug = enable;
     this.logger.enable(enable);
-    console.log(`✅ Debug mode ${enable ? 'enabled' : 'disabled'}`);
+    this.logger.log('CONFIG', `🔧 Debug ${enable ? 'enabled' : 'disabled'}`);
     return this;
   }
 
@@ -431,19 +452,19 @@ export class AIModel {
   // ============================================
 
   /**
-   * Add a message to the conversation
-   * @param {string | MessageContent[]} content - Message content
-   * @param {'user' | 'assistant'} [role='user'] - Message role
-   * @returns {this} Chainable instance
+   * Add message to conversation history
+   * @param content - Message content (text or structured)
+   * @param role - Message sender role
+   * @returns This instance for chaining
    * @example
    * // Text message
-   * ai.addMessage('Hello, world!');
+   * ai.addMessage('Hello world!', 'user');
    * 
-   * // Message with image
+   * // Structured message with image
    * ai.addMessage([
-   *   { type: 'text', text: 'What do you see?' },
+   *   { type: 'text', text: 'Describe this image' },
    *   { type: 'image_url', image_url: { url: 'https://example.com/image.jpg' } }
-   * ]);
+   * ], 'user');
    */
   addMessage(content: string | MessageContent[], role: 'user' | 'assistant' = 'user'): this {
     this.messages.push({ role, content });
@@ -464,64 +485,63 @@ export class AIModel {
   }
 
   /**
-   * Add a user message
-   * @param {string | MessageContent[]} content - Message content
-   * @returns {this} Chainable instance
+   * Add user message (convenience method)
+   * @param content - Message content
+   * @returns This instance for chaining
    */
   addUserMessage(content: string | MessageContent[]): this {
     return this.addMessage(content, 'user');
   }
 
   /**
-   * Add an assistant message
-   * @param {string | MessageContent[]} content - Message content
-   * @returns {this} Chainable instance
+   * Add assistant message (convenience method)
+   * @param content - Message content
+   * @returns This instance for chaining
    */
   addAssistantMessage(content: string | MessageContent[]): this {
     return this.addMessage(content, 'assistant');
   }
 
   /**
-   * Add a text message
-   * @param {string} text - Text content
-   * @param {'user' | 'assistant'} [role='user'] - Message role
-   * @returns {this} Chainable instance
+   * Add simple text message
+   * @param text - Text content
+   * @param role - Message role (default: user)
+   * @returns This instance for chaining
    */
   addTextMessage(text: string, role: 'user' | 'assistant' = 'user'): this {
     return this.addMessage(text, role);
   }
 
   /**
-   * Add a message with text and image
-   * @param {string} text - Text description
-   * @param {string} imageUrl - URL of the image
-   * @param {'user'} [role='user'] - Message role (always 'user' for images)
-   * @returns {this} Chainable instance
+   * Add message with text and image
+   * @param text - Text description or question
+   * @param imageUrl - URL of image to analyze
+   * @returns This instance for chaining
    * @example
    * ai.addImageMessage(
    *   'What is in this image?',
-   *   'https://example.com/image.jpg'
+   *   'https://example.com/photo.jpg'
    * );
    */
-  addImageMessage(text: string, imageUrl: string, role: 'user' = 'user'): this {
+  addImageMessage(text: string, imageUrl: string): this {
     const content: MessageContent[] = [
       { type: 'text', text },
       { type: 'image_url', image_url: { url: imageUrl } }
     ];
-    return this.addMessage(content, role);
+    return this.addMessage(content, 'user');
   }
 
   /**
-   * Get all messages in the conversation
-   * @returns {Message[]} Array of messages
+   * Get all messages in current conversation
+   * @returns Copy of message history
    */
   getMessages(): Message[] {
     return [...this.messages];
   }
 
   /**
-   * Clear all messages from the conversation
-   * @returns {this} Chainable instance
+   * Clear conversation history
+   * @returns This instance for chaining
    */
   clearMessages(): this {
     const count = this.messages.length;
@@ -531,27 +551,77 @@ export class AIModel {
   }
 
   /**
-   * Reset the model state (clears messages and system prompt)
-   * @returns {this} Chainable instance
+   * Reset model to initial state (clears messages and system prompt)
+   * @returns This instance for chaining
    */
   reset(): this {
     this.messages = [];
     this.config.systemPrompt = '';
-    this.logger.log('CONFIG', '🔄 Reset complete', {
-      message: 'All messages and system prompt cleared',
+    this.logger.log('CONFIG', '🔄 Model reset', {
+      message: 'Cleared all messages and system prompt',
     });
     return this;
   }
 
   // ============================================
-  // PRIVATE HELPERS
+  // QUICK MESSAGE METHODS (ONE-LINERS)
   // ============================================
 
   /**
-   * Build the complete message array including system prompt
-   * @private
-   * @returns {Message[]} Complete message array
+   * Send single text message and get response (convenience method)
+   * @param text - Message text
+   * @param options - Request options override
+   * @returns AI response
+   * @example
+   * const response = await ai.sendTextMessage('Hello!');
+   * console.log(response.content);
    */
+  async sendTextMessage(text: string, options?: RequestOptions): Promise<AIResponse> {
+    return this.addUserMessage(text).send(options);
+  }
+
+  /**
+   * Send image with text description and get response
+   * @param text - Text question/description
+   * @param imageUrl - Image URL
+   * @param options - Request options override
+   * @returns AI response
+   * @example
+   * const response = await ai.sendImageMessage(
+   *   'What do you see?',
+   *   'https://example.com/image.jpg'
+   * );
+   */
+  async sendImageMessage(text: string, imageUrl: string, options?: RequestOptions): Promise<AIResponse> {
+    return this.addImageMessage(text, imageUrl).send(options);
+  }
+
+  /**
+   * Send multiple pre-defined messages and get response
+   * @param messages - Array of message objects
+   * @param options - Request options override
+   * @returns AI response
+   * @example
+   * const response = await ai.sendMultipleMessages([
+   *   { role: 'user', content: 'Hello' },
+   *   { role: 'assistant', content: 'Hi there!' },
+   *   { role: 'user', content: 'How are you?' }
+   * ]);
+   */
+  async sendMultipleMessages(
+    messages: Array<{ role: 'user' | 'assistant', content: string }>, 
+    options?: RequestOptions
+  ): Promise<AIResponse> {
+    this.clearMessages();
+    messages.forEach(msg => this.addMessage(msg.content, msg.role));
+    return this.send(options);
+  }
+
+  // ============================================
+  // PRIVATE HELPER METHODS
+  // ============================================
+
+  /** Build complete message array including system prompt */
   private buildMessages(): Message[] {
     const msgs: Message[] = [];
     
@@ -563,23 +633,21 @@ export class AIModel {
     return msgs;
   }
 
-  /**
-   * Validate that there are messages to send
-   * @private
-   * @throws {Error} If no messages are available
-   */
+  /** Validate that we have messages to send */
   private validateMessages(): void {
-    if (this.buildMessages().length === 0) {
+    const messages = this.buildMessages();
+    if (messages.length === 0) {
       throw new Error('No messages to send. Add at least one message or set a system prompt.');
+    }
+
+    // Check if there's at least one user message
+    const hasUserMessage = messages.some(msg => msg.role === 'user');
+    if (!hasUserMessage) {
+      throw new Error('No user messages to send. Add at least one user message.');
     }
   }
 
-  /**
-   * Merge request options with model configuration
-   * @private
-   * @param {RequestOptions} [options] - Request options
-   * @returns Merged configuration
-   */
+  /** Merge request options with model defaults */
   private mergeOptions(options?: RequestOptions) {
     return {
       model: options?.model || this.config.model,
@@ -589,13 +657,7 @@ export class AIModel {
     };
   }
 
-  /**
-   * Make a request with retry logic
-   * @private
-   * @template T
-   * @param {() => Promise<T>} requestFn - Function that makes the request
-   * @returns {Promise<T>} Request result
-   */
+  /** Execute request with retry logic and exponential backoff */
   private async makeRequest<T>(requestFn: () => Promise<T>): Promise<T> {
     let lastError: Error | null = null;
     
@@ -603,26 +665,26 @@ export class AIModel {
       try {
         return await requestFn();
       } catch (error) {
-        lastError = error instanceof Error ? error : new Error('Unknown error');
+        lastError = error instanceof Error ? error : new Error(String(error));
         
         if (attempt < this.config.retryAttempts) {
+          const delayMs = 2 ** attempt * 1000;
           this.logger.log('ERROR', `❌ Request failed (attempt ${attempt}/${this.config.retryAttempts})`, {
-            message: lastError.message,
-            willRetry: true,
+            error: lastError.message,
+            retryIn: `${delayMs}ms`,
           });
           
-          // Exponential backoff
-          await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
+          await new Promise(resolve => setTimeout(resolve, delayMs));
         }
       }
     }
     
     this.logger.log('ERROR', '❌ All retry attempts failed', {
-      message: lastError.message,
+      error: lastError?.message,
       attempts: this.config.retryAttempts,
     });
     
-    throw lastError;
+    throw lastError || new Error('Request failed after all retry attempts');
   }
 
   // ============================================
@@ -630,15 +692,15 @@ export class AIModel {
   // ============================================
 
   /**
-   * Send a request to the AI model
-   * @param {RequestOptions} [options] - Optional request overrides
-   * @returns {Promise<AIResponse>} AI response
+   * Send conversation to AI model and get response
+   * @param options - Request-specific options
+   * @returns Structured AI response
+   * @throws {Error} On API errors or invalid requests
    * @example
    * const response = await ai.send({
    *   temperature: 0.8,
    *   maxTokens: 1500
    * });
-   * console.log(response.content);
    */
   async send(options?: RequestOptions): Promise<AIResponse> {
     this.validateMessages();
@@ -667,17 +729,17 @@ export class AIModel {
       const completion = await this.makeRequest(() => 
         this.client.chat.completions.create({
           model: config.model,
-          messages,
+          messages: messages as OpenAI.ChatCompletionMessageParam[],
           temperature: config.temperature,
           max_tokens: config.maxTokens,
           stream: false,
         })
       );
 
-      const content = completion.choices[0].message?.content || '';
+      const content = completion.choices[0]?.message?.content || '';
       const duration = Date.now() - startTime;
       
-      // Auto-add assistant response to history
+      // Auto-add assistant response to conversation history
       this.messages.push({ role: 'assistant', content });
 
       const response: AIResponse = {
@@ -688,7 +750,7 @@ export class AIModel {
           totalTokens: completion.usage?.total_tokens || 0,
         },
         model: completion.model,
-        finishReason: completion.choices[0].finish_reason,
+        finishReason: completion.choices[0]?.finish_reason,
       };
 
       this.logger.log('RESPONSE', '📥 Received response', {
@@ -718,14 +780,13 @@ export class AIModel {
   }
 
   /**
-   * Stream a response from the AI model
-   * @param {(chunk: string) => void} onChunk - Callback for each chunk
-   * @param {RequestOptions} [options] - Optional request overrides
-   * @returns {Promise<string>} Complete response content
+   * Stream response from AI model in real-time
+   * @param onChunk - Callback for each text chunk
+   * @param options - Request options override
+   * @returns Complete response content
    * @example
-   * const fullResponse = await ai.stream(
-   *   (chunk) => process.stdout.write(chunk),
-   *   { temperature: 0.9 }
+   * const fullText = await ai.stream(
+   *   (chunk) => process.stdout.write(chunk)
    * );
    */
   async stream(
@@ -742,14 +803,6 @@ export class AIModel {
       temperature: config.temperature,
       maxTokens: config.maxTokens,
       messageCount: messages.length,
-      messages: messages.map(m => ({
-        role: m.role,
-        contentType: typeof m.content,
-        contentLength: typeof m.content === 'string' ? m.content.length : JSON.stringify(m.content).length,
-        contentPreview: typeof m.content === 'string' 
-          ? m.content.substring(0, 150)
-          : JSON.stringify(m.content).substring(0, 150),
-      })),
     });
 
     try {
@@ -758,7 +811,7 @@ export class AIModel {
       const stream = await this.makeRequest(() => 
         this.client.chat.completions.create({
           model: config.model,
-          messages,
+          messages: messages as OpenAI.ChatCompletionMessageParam[],
           temperature: config.temperature,
           max_tokens: config.maxTokens,
           stream: true,
@@ -779,7 +832,7 @@ export class AIModel {
 
       const duration = Date.now() - startTime;
 
-      // Auto-add assistant response to history
+      // Add complete response to history
       this.messages.push({ role: 'assistant', content: fullContent });
 
       this.logger.log('STREAM', '✅ Streaming completed', {
@@ -787,7 +840,7 @@ export class AIModel {
         model: config.model,
         chunksReceived: chunkCount,
         totalLength: fullContent.length,
-        avgChunkSize: Math.round(fullContent.length / chunkCount),
+        avgChunkSize: Math.round(fullContent.length / Math.max(chunkCount, 1)),
         contentPreview: fullContent.substring(0, 200),
       });
 
@@ -808,64 +861,66 @@ export class AIModel {
   // ============================================
 
   /**
-   * Create a new AI model instance
-   * @param {AIModelConfig} config - Model configuration
-   * @param {Logger} [logger] - Optional custom logger
-   * @returns {AIModel} New AI model instance
-   * @example
-   * const ai = AIModel.create({
-   *   apiKey: 'your-key',
-   *   provider: 'openrouter',
-   *   debug: true
-   * });
+   * Create new AI model instance (static factory)
+   * @param config - Model configuration
+   * @param logger - Optional custom logger
+   * @returns New AIModel instance
    */
   static create(config: AIModelConfig, logger?: Logger): AIModel {
     return new AIModel(config, logger);
   }
 
   /**
-   * Create an AI model from environment variables
-   * @param {string} [provider] - Provider name (defaults to 'openrouter')
-   * @param {Partial<AIModelConfig>} [overrides] - Configuration overrides
-   * @param {Logger} [logger] - Optional custom logger
-   * @returns {AIModel} New AI model instance
+   * Create AI model using environment variables
+   * @param provider - Provider name (defaults to 'openrouter')
+   * @param overrides - Configuration overrides
+   * @param logger - Optional custom logger
+   * @returns New AIModel instance
+   * @throws {Error} If API key not found in environment
    * @example
-   * // Uses OPENROUTER_API_KEY or OPENAI_API_KEY
+   * // Uses OPENROUTER_API_KEY or OPENAI_API_KEY from env
    * const ai = AIModel.createFromEnv('openrouter', {
    *   model: 'gpt-4',
    *   debug: true
    * });
    */
-  static createFromEnv(provider?: string, overrides?: Partial<AIModelConfig>, logger?: Logger): AIModel {
-    const envKey = provider?.toUpperCase() || 'OPENROUTER';
+  static createFromEnv(
+    provider?: string, 
+    overrides?: Partial<AIModelConfig>, 
+    logger?: Logger
+  ): AIModel {
+    const providerId = provider || 'openrouter';
+    const envKey = providerId.toUpperCase();
     const apiKey = process.env[`${envKey}_API_KEY`] || process.env.OPENAI_API_KEY;
     
     if (!apiKey) {
-      throw new Error(`${envKey}_API_KEY or OPENAI_API_KEY environment variable is not set`);
+      throw new Error(
+        `${envKey}_API_KEY or OPENAI_API_KEY environment variable is not set. ` +
+        `Please set it to use the ${providerId} provider.`
+      );
     }
 
     return new AIModel({
       apiKey,
-      provider: provider || 'openrouter',
+      provider: providerId,
       ...overrides,
     }, logger);
   }
 
   /**
-   * Create an AI model for a specific provider
-   * @param {string} providerId - Provider identifier
-   * @param {string} apiKey - API key for the provider
-   * @param {Partial<AIModelConfig>} [overrides] - Configuration overrides
-   * @param {Logger} [logger] - Optional custom logger
-   * @returns {AIModel} New AI model instance
-   * @example
-   * const ai = AIModel.createForProvider(
-   *   'openai',
-   *   'your-openai-key',
-   *   { model: 'gpt-4' }
-   * );
+   * Create AI model for specific provider with API key
+   * @param providerId - Provider identifier
+   * @param apiKey - Provider API key
+   * @param overrides - Configuration overrides
+   * @param logger - Optional custom logger
+   * @returns New AIModel instance
    */
-  static createForProvider(providerId: string, apiKey: string, overrides?: Partial<AIModelConfig>, logger?: Logger): AIModel {
+  static createForProvider(
+    providerId: string, 
+    apiKey: string, 
+    overrides?: Partial<AIModelConfig>, 
+    logger?: Logger
+  ): AIModel {
     return new AIModel({
       apiKey,
       provider: providerId,
@@ -875,42 +930,33 @@ export class AIModel {
 }
 
 // ============================================
-// CONFIGURATION MANAGER
+// CONFIGURATION MANAGER (SINGLETON)
 // ============================================
 
 /**
- * Singleton configuration manager for the AI library
+ * Global configuration manager for AI library
+ * Provides singleton access to default configurations and provider management
  * @class ConfigManager
  * @example
  * const config = ConfigManager.getInstance();
- * config.setDefaultConfig({
- *   temperature: 0.7,
- *   debug: true
- * });
+ * config.setDefaultConfig({ temperature: 0.7, debug: true });
  * 
  * const ai = config.createModel({
- *   apiKey: 'your-key'
+ *   apiKey: 'your-key',
+ *   model: 'gpt-4'
  * });
  */
 export class ConfigManager {
-  /** Singleton instance */
   private static instance: ConfigManager;
-  
-  /** Default configuration */
   private defaultConfig: Partial<AIModelConfig> = {};
-  
-  /** Custom providers */
-  private providers: Map<string, AIProviderConfig> = new Map();
+  private customProviders: Map<string, AIProviderConfig> = new Map();
 
-  /**
-   * Private constructor for singleton pattern
-   * @private
-   */
+  /** Private constructor for singleton pattern */
   private constructor() {}
 
   /**
-   * Get the singleton instance
-   * @returns {ConfigManager} Configuration manager instance
+   * Get singleton instance
+   * @returns ConfigManager instance
    */
   static getInstance(): ConfigManager {
     if (!ConfigManager.instance) {
@@ -920,8 +966,8 @@ export class ConfigManager {
   }
 
   /**
-   * Set default configuration for all models
-   * @param {Partial<AIModelConfig>} config - Default configuration
+   * Set default configuration for all created models
+   * @param config - Default configuration values
    * @example
    * config.setDefaultConfig({
    *   temperature: 0.8,
@@ -934,68 +980,67 @@ export class ConfigManager {
   }
 
   /**
-   * Get the current default configuration
-   * @returns {Partial<AIModelConfig>} Default configuration
+   * Get current default configuration
+   * @returns Copy of default configuration
    */
   getDefaultConfig(): Partial<AIModelConfig> {
     return { ...this.defaultConfig };
   }
 
   /**
-   * Register a custom provider
-   * @param {string} id - Provider identifier
-   * @param {AIProviderConfig} config - Provider configuration
-   * @example
-   * config.registerProvider('my-provider', {
-   *   name: 'My AI Provider',
-   *   baseURL: 'https://api.myprovider.com/v1',
-   *   defaultModel: 'my-model-v1'
-   * });
+   * Register custom provider with configuration manager
+   * @param id - Provider identifier
+   * @param config - Provider configuration
    */
   registerProvider(id: string, config: AIProviderConfig): void {
-    this.providers.set(id, config);
+    this.customProviders.set(id, config);
     ProviderRegistry.registerProvider(id, config);
   }
 
   /**
-   * Get a provider configuration
-   * @param {string} id - Provider identifier
-   * @returns {AIProviderConfig | undefined} Provider configuration
+   * Get provider configuration
+   * @param id - Provider identifier
+   * @returns Provider config or undefined
    */
   getProvider(id: string): AIProviderConfig | undefined {
-    return this.providers.get(id) || ProviderRegistry.getProvider(id);
+    return this.customProviders.get(id) || ProviderRegistry.getProvider(id);
   }
 
   /**
-   * Create a new AI model with default configuration
-   * @param {Partial<AIModelConfig>} [overrides] - Configuration overrides
-   * @param {Logger} [logger] - Optional custom logger
-   * @returns {AIModel} New AI model instance
-   * @throws {Error} If API key is not provided
-   * @example
-   * const ai = config.createModel({
-   *   apiKey: 'your-key',
-   *   model: 'gpt-4'
-   * });
+   * Create AI model with default configuration and overrides
+   * @param overrides - Configuration overrides
+   * @param logger - Optional custom logger
+   * @returns New AIModel instance
+   * @throws {Error} If API key not provided
    */
   createModel(overrides?: Partial<AIModelConfig>, logger?: Logger): AIModel {
     const config = { ...this.defaultConfig, ...overrides };
     
     if (!config.apiKey) {
-      throw new Error('API key is required in config');
+      throw new Error('API key is required. Provide it in config or set via setDefaultConfig().');
     }
     
     return new AIModel(config as AIModelConfig, logger);
   }
+
+  /**
+   * Get all available providers (built-in + custom)
+   * @returns Map of all provider configurations
+   */
+  getAllProviders(): Map<string, AIProviderConfig> {
+    const allProviders = new Map(ProviderRegistry.getAllProviders());
+    this.customProviders.forEach((config, id) => allProviders.set(id, config));
+    return allProviders;
+  }
 }
 
 // ============================================
-// EXPORTS
+// CONVENIENCE EXPORTS AND DEFAULT INSTANCE
 // ============================================
 
 /**
- * Default export containing all library components
- * @namespace
+ * Default library export with all major components
+ * Provides easy access to all functionality from single import
  */
 export default {
   /** Main AI Model class */
@@ -1007,3 +1052,47 @@ export default {
   /** Default logger implementation */
   DefaultLogger,
 };
+
+/**
+ * Quick-start function for common use cases
+ * Creates pre-configured AI model instance
+ * @param apiKey - API key for authentication
+ * @param provider - Provider ID (default: 'openrouter')
+ * @param options - Additional configuration options
+ * @returns New AIModel instance
+ * @example
+ * const ai = createAI(process.env.OPENAI_API_KEY, 'openai', {
+ *   temperature: 0.8,
+ *   debug: true
+ * });
+ */
+export function createAI(
+  apiKey: string,
+  provider: string = 'openrouter',
+  options: Partial<AIModelConfig> = {}
+): AIModel {
+  return new AIModel({
+    apiKey,
+    provider,
+    ...options,
+  });
+}
+
+/**
+ * Utility function to validate provider configuration
+ * @param providerId - Provider identifier to check
+ * @returns Validation result with status and message
+ */
+export function validateProvider(providerId: string): { valid: boolean; message: string } {
+  if (!ProviderRegistry.hasProvider(providerId)) {
+    return {
+      valid: false,
+      message: `Provider '${providerId}' not found. Available: ${Array.from(ProviderRegistry.getAllProviders().keys()).join(', ')}`
+    };
+  }
+  
+  return {
+    valid: true,
+    message: `Provider '${providerId}' is available`
+  };
+}
